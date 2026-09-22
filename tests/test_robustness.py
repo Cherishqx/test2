@@ -185,3 +185,46 @@ def test_r13_repeated_call_stability(run_rag):
     assert knowledge_texts(k1) == knowledge_texts(k2), (
         "同一输入的检索+重排结果应确定一致，否则系统稳定性不足"
     )
+
+
+# ========================================================================
+# R14 | 测试方法：错误推测法（缺陷驱动回归——query=None）
+# 缺陷分析：v1 中 chromaRetrieval/Reranker 位于 try 之外，query=None
+# 会在检索层抛出未捕获的 TypeError 直接崩溃。
+# 优化后（RAG._sanitize_input）：None 被规范化为空查询，走既有空输入
+# 路径，输出契约成立。本用例回归守护该优化不被回退
+# ========================================================================
+@pytest.mark.gpu
+def test_r14_none_query_input(run_rag):
+    entire_json, response, knowledge = run_rag(None, history=[])
+    assert_contract(entire_json, response)
+    assert isinstance(knowledge, list), "规范化后知识列表仍须为 list"
+
+
+# ========================================================================
+# R15 | 测试方法：错误推测法（缺陷驱动回归——非字符串 query）
+# 缺陷分析：v1 中 query=12345（int）会在检索层抛 TypeError 崩溃。
+# 优化后：非字符串输入被安全转为字符串，契约成立
+# ========================================================================
+@pytest.mark.gpu
+def test_r15_non_string_query_input(run_rag):
+    entire_json, response, _ = run_rag(12345, history=[])
+    assert_contract(entire_json, response)
+
+
+# ========================================================================
+# R16 | 测试方法：边界值分析 + 防御性编程验证（超长历史截断）
+# 缺陷分析：v1 对 history 无长度限制，2000 轮历史直接拼入提示词，
+# 导致上下文溢出/资源耗尽。
+# 优化后（RAG.MAX_HISTORY_TURNS=50）：仅保留最近 50 轮，系统应走
+# 成功路径（choices）——本用例断言"成功"而非仅"不崩溃"，以锁定优化效果
+# ========================================================================
+@pytest.mark.gpu
+def test_r16_oversized_history_truncation(run_rag):
+    huge_history = []
+    for i in range(1000):  # 1000 轮 × 2 条消息 = 2000 条历史
+        huge_history.append(["user", f"请再详细讲讲第{i}步配方法的推导细节与系数处理方式"])
+        huge_history.append(["assistant", f"好的，第{i}步的关键在于二次项系数的规范化处理。"])
+    entire_json, response, _ = run_rag("一元二次方程的解法", history=huge_history)
+    parsed = assert_contract(entire_json, response)
+    assert "choices" in parsed, "超长历史被截断后应正常作答，而不是溢出失败"
