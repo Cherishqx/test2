@@ -2,6 +2,9 @@
 .vscode/
 
 Qwen/
+.venv/
+run_logs/
+.download-tools/
 
 __pycache__/
 *.py[cod]

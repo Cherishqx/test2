@@ -91,6 +91,34 @@ C:\Users\<用户名>\.cache\chroma\onnx_models\all-MiniLM-L6-v2\
 
 ## 6. 运行
 
+### 本机已配置的项目环境（Windows / RTX 50 系列）
+
+在本 README 所在目录运行：
+
+```powershell
+$env:PYTHONUTF8 = "1"
+.\.venv\Scripts\python.exe .\RAG\RAG.py
+.\run_tests.bat
+# 自动化运行，不等待按键：
+.\run_tests.bat --no-pause
+```
+
+本机 `.venv` 使用 Python 3.10，并复用已有 `pamt` 环境中的
+PyTorch 2.7.1 + CUDA 12.8；因此请保留该基础环境。
+RTX 50 系列需要支持 Blackwell 的 PyTorch，不能使用上文针对 RTX 3060 的
+PyTorch 2.5.1 + CUDA 12.1 配置。新建环境时可单独安装：
+
+```powershell
+python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python -X utf8 -m pip install -r requirements.txt
+python -m pip install pytest modelscope
+```
+
+`run_tests.bat` 会优先使用项目 `.venv`，实际测试数量以 pytest 收集结果为准。
+测试细节见 [tests/README.md](tests/README.md)。
+
+### 原 Conda 环境运行方式
+
 ```powershell
 conda activate rag
 cd d:\project\code\test2\RAG

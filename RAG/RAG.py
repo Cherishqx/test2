@@ -23,6 +23,27 @@ MAX_HISTORY_TURNS = 50   # 对话历史上限：仅保留最近 N 轮，防止�
 # 集合名白名单：3~63 位 [A-Za-z0-9._-]，首尾为字母数字（与 chromadb 命名规则对齐）
 _COLLECTION_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,61}[A-Za-z0-9]")
 
+# 明确的角色覆盖命令：不单独按 DAN 等名词拦截，避免把普通概念提问当成攻击。
+_ROLE_OVERRIDE_RE = re.compile(
+    r"(?:进入|切换到|启用).{0,16}(?:DAN|无限制|无约束)模式"
+    r"|(?:忽略|无视|绕过|解除|取消).{0,16}(?:指令|规则|限制)"
+    r"|(?:不再受|不受).{0,16}(?:规则|限制)"
+    r"|\b(?:enter|enable|switch\s+to)\s+(?:the\s+)?(?:DAN|unrestricted)\s+mode\b"
+    r"|\b(?:ignore|bypass|remove|disable)\b.{0,40}\b(?:instructions|rules|restrictions)\b",
+    re.IGNORECASE,
+)
+ROLE_OVERRIDE_REFUSAL = "我不能改变助手身份或解除规则限制。请提出具体的数学问题。"
+
+
+def _guard_role_override(query, response):
+    """对已知角色覆盖命令强制拒绝；不把小模型的提示词遵循当作安全保证。
+
+    此启发式只覆盖明确命令，可能误拦引用此类命令的文本，不保证识别所有攻击。
+    """
+    if _ROLE_OVERRIDE_RE.search(query):
+        return ROLE_OVERRIDE_REFUSAL
+    return response
+
 
 def _sanitize_input(history, query, collection_name):
     """输入加固：类型规范化 + 长度截断 + 集合名白名单校验。
@@ -79,7 +100,10 @@ def rag(history, model, tokenizer, streamer, query, reranker, collection_name="M
         else:
             prompt = get_RAG_prompt(relative_knowledge_rerank, None, None, query)
 
-        response, model_inputs, generated_ids = run_model_inference(model, tokenizer, streamer, prompt)
+        # 被拦截请求不流式暴露原始生成内容，避免最终替换前先把不安全回答打印出去。
+        inference_streamer = None if _ROLE_OVERRIDE_RE.search(query) else streamer
+        response, model_inputs, generated_ids = run_model_inference(model, tokenizer, inference_streamer, prompt)
+        response = _guard_role_override(query, response)
         output = format_output(response, model_inputs, generated_ids)
         entire_json = json.dumps(output, indent=4, ensure_ascii=False)
     except Exception as e:
