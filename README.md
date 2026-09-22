@@ -103,3 +103,9 @@ python RAG.py
 2. reranker 加载 + 重排序 Top5 知识片段（`Knowledge: {...}` × 5）
 3. 模型流式生成的回答
 4. OpenAI 格式的 JSON（`chat.completion`）与回答文本
+
+
+TODO：
+
+* [ ] readme待修改，test相关说明在tests\README.md，待合并过来
+* [ ] 目前还有一个测试不通过，待优化
